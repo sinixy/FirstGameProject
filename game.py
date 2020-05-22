@@ -1,13 +1,15 @@
 import pygame as pg
-import sys
-from os import path
+import sys, psutil
+from os import path, getpid
 from settings import *
 from engine import *
+from exceptions import *
 
 class Game:
     def __init__(self):
         pg.init()
         self.__screen = pg.display.set_mode((WIDTH, HEIGHT))
+        pg.display.toggle_fullscreen()
         self.__font_name = pg.font.match_font('arial')
         self.__clock = pg.time.Clock()
         pg.display.set_caption(TITLE)
@@ -16,11 +18,12 @@ class Game:
     def load_data(self):
     	self.dir = path.dirname(__file__)
     	self.img_dir = path.join(self.dir, 'img')
-    	self.player_img = 'totoro.png'
+    	self.player_img = 'player.png'
     	self.plat_img = 'block.png'
     def new(self):
         self.all_sprites = pg.sprite.Group()
-        self.blocks = pg.sprite.Group()
+        self._blocks = pg.sprite.Group()
+        self._bullets = pg.sprite.Group()
         self.player = Player(self, self.player_img, WIDTH / 2, HEIGHT / 2)
         for i in [WIDTH / 2 - 3*64, WIDTH / 2 - 2*64, WIDTH / 2 - 64, WIDTH / 2, WIDTH / 2 + 64, WIDTH / 2 + 2*64, WIDTH / 2 + 3*64]:
             p = Block(self, self.plat_img, i, 700)
@@ -35,25 +38,29 @@ class Game:
             self.events()
             self.update()
             self.draw()
-
+    @property
+    def blocks(self):
+        return self._blocks
+    @property
+    def bullets(self):
+        return self._bullets
     def quit(self):
         pg.quit()
         sys.exit()
-
     def update(self):
-        # updates
         self.all_sprites.update()
         self.camera.update(self.player)
     def draw(self):
-    	self.__screen.fill(BGCOLOR)
-    	for sprite in self.all_sprites:
-    		self.__screen.blit(sprite.image, self.camera.apply(sprite))
-    	self.draw_text(f'x: {round(self.player.pos.x, 2)}', 22, WHITE, 80, 40)
-    	self.draw_text(f'y: {round(self.player.pos.y, 2)}', 22, WHITE, 80, 80)
-    	self.draw_text(f'vel: {self.player.vel}', 22, WHITE, 80, 120)
-    	#self.draw_text(f'acc: {self.player.acc}', 22, WHITE, 80, 160)
-    	pg.display.flip()
-
+        self.__screen.fill(BGCOLOR)
+        for sprite in self.all_sprites:
+            self.__screen.blit(sprite.image, self.camera.apply(sprite))
+            #pg.draw.rect(self.__screen, pg.Color('white'), self.camera.apply(sprite), 3)
+        self.draw_text(f'x: {round(self.player.pos.x, 2)}', 22, WHITE, 80, 40)
+        self.draw_text(f'y: {round(self.player.pos.y, 2)}', 22, WHITE, 80, 80)
+        self.draw_text(f'vel: {self.player.vel}', 22, WHITE, 80, 120)
+        #self.draw_text(f'facing: {self.player.facing}', 22, WHITE, 80, 160)
+        #self.draw_text(f'acc: {self.player.acc}', 22, WHITE, 80, 160)
+        pg.display.flip()
     def events(self):
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -69,14 +76,22 @@ class Game:
         self.__screen.blit(text_surface, text_rect)
     def show_start_screen(self):
         pass
-
     def show_go_screen(self):
         pass
 
 if __name__ == "__main__":
-	g = Game()
-	g.show_start_screen()
-	while True:
-		g.new()
-		g.run()
-		g.show_go_screen()
+    svmem = psutil.virtual_memory()
+    # якщо оперативної пам'яті менше, ніж 128мб
+    try:
+        ram = svmem.available
+        if 128000000 > ram:
+            raise DoesNotMeetRequirements('Not enough RAM!', ram)
+    except DoesNotMeetRequirements as e:
+        print(f'Error! {e.msg}\nYou have only {e.available} bytes available!')
+        sys.exit()
+    g = Game()
+    g.show_start_screen()
+    while True:
+        g.new()
+        g.run()
+        g.show_go_screen()
