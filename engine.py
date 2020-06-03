@@ -2,6 +2,7 @@ import pygame as pg
 from os import path
 from settings import *
 from abc import ABC, abstractmethod
+from random import choice
 vec = pg.math.Vector2
 
 class IUpdate(ABC):
@@ -20,30 +21,41 @@ class IFire(ABC):
 	def reload(self):
 		pass
 
-def load_image(filename):
-	image = pg.image.load(filename).convert_alpha()
-	image.set_colorkey((0, 0, 0))
-	return image
-def load_animation(baseFilename, count):
-	animation = []
-	for i in range(1, count + 1):
-		animation.append(
-			load_image(f'{baseFilename}{i}.png')
-			)
-	return animation
-def flip_animation(animation):
-	for i in range(0, len(animation)):
-		animation[i] = pg.transform.flip(animation[i], True, False)
-	return animation
+class UtilsMeta(type):
+    def __init__(cls, name, bases, attrs):
+        super().__init__(name, bases, attrs)
+        cls._instance = None
+    def __call__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__call__()
+        return cls._instance
+
+class Utils(metaclass=UtilsMeta):
+	def load_image(self, filename):
+		image = pg.image.load(filename).convert_alpha()
+		image.set_colorkey((0, 0, 0))
+		return image
+	def load_animation(self, baseFilename, count):
+		animation = []
+		for i in range(1, count + 1):
+			animation.append(
+				self.load_image(f'{baseFilename}{i}.png')
+				)
+		return animation
+	def flip_animation(self, animation):
+		for i in range(0, len(animation)):
+			animation[i] = pg.transform.flip(animation[i], True, False)
+		return animation
 
 class Physics_Object(pg.sprite.Sprite):
 	def __init__(self, game, image, x, y):
 		pg.sprite.Sprite.__init__(self)
 		self.game = game
-		self.image = load_image(path.join(self.game.img_dir, image))
+		self.handler = Utils()
+		self.image = self.handler.load_image(path.join(self.game.img_dir, image))
 		self.rect = self.image.get_rect()
-		self.rect.midbottom = (x, y)
-		self.pos = vec(x, y)
+		self.rect.midbottom = (x * TILESIZE, y * TILESIZE)
+		self.pos = vec(x * TILESIZE, y * TILESIZE)
 
 class Block(Physics_Object):
 	def __init__(self, game, image, x, y):
@@ -123,11 +135,6 @@ class ActiveEntity(Entity):
 		if self.onBlock() and not self.jumping:
 		    self.jumping = True
 		    self.vel.y = -400
-	@property
-	def status(self):
-		return '''Cords: {}
-Velocity: {}
-Jumping: {}'''.format(self.pos, self.vel, self.jumping)
 
 class Player(ActiveEntity, IUpdate, IFire):
 	def __init__(self, game, image, x, y):
@@ -146,17 +153,17 @@ class Player(ActiveEntity, IUpdate, IFire):
 		self.pickup_weapon()
 	def load_images(self):
 		try:
-			self.idle_frames_r = load_animation(path.join(self.game.img_dir, 'player_idle'), 2)
-			self.idle_frames_l = flip_animation(self.idle_frames_r.copy())
-			self.run_frames_r = load_animation(path.join(self.game.img_dir,'player_run'), 8)
-			self.run_frames_l = flip_animation(self.run_frames_r.copy())
-			self.jump_frame_r = load_image(path.join(self.game.img_dir,'player_jump.png'))
+			self.idle_frames_r = self.handler.load_animation(path.join(self.game.img_dir, 'player_idle'), 2)
+			self.idle_frames_l = self.handler.flip_animation(self.idle_frames_r.copy())
+			self.run_frames_r = self.handler.load_animation(path.join(self.game.img_dir,'player_run'), 8)
+			self.run_frames_l = self.handler.flip_animation(self.run_frames_r.copy())
+			self.jump_frame_r = self.handler.load_image(path.join(self.game.img_dir,'player_jump.png'))
 			self.jump_frame_l = pg.transform.flip(self.jump_frame_r.copy(), True, False)
-			self.pistol_run_r = load_animation(path.join(self.game.img_dir, 'player_run_pistol'), 8)
-			self.pistol_run_l = flip_animation(self.pistol_run_r.copy())
-			self.pistol_idle_r = load_animation(path.join(self.game.img_dir, 'player_idle_pistol'), 2)
-			self.pistol_idle_l = flip_animation(self.pistol_idle_r.copy())
-			self.pistol_jump_r = load_image(path.join(self.game.img_dir, 'player_jump_pistol.png'))
+			self.pistol_run_r = self.handler.load_animation(path.join(self.game.img_dir, 'player_run_pistol'), 8)
+			self.pistol_run_l = self.handler.flip_animation(self.pistol_run_r.copy())
+			self.pistol_idle_r = self.handler.load_animation(path.join(self.game.img_dir, 'player_idle_pistol'), 2)
+			self.pistol_idle_l = self.handler.flip_animation(self.pistol_idle_r.copy())
+			self.pistol_jump_r = self.handler.load_image(path.join(self.game.img_dir, 'player_jump_pistol.png'))
 			self.pistol_jump_l = pg.transform.flip(self.pistol_jump_r.copy(), True, False)
 		except Exception as e:
 			print(f'Error occured!\n{e}')
@@ -255,7 +262,6 @@ class Player(ActiveEntity, IUpdate, IFire):
 	def pickup_weapon(self):
 		self.holding_weapon['pistol'] = True
 		self.weapon = Pistol(self.game, self)
-		# self.image = load_image(path.join(self.game.img_dir, 'player_pistol.png'))
 	def fire(self):
 		now = pg.time.get_ticks()
 		if now - self.last_shot > self.weapon.rate:
@@ -263,6 +269,51 @@ class Player(ActiveEntity, IUpdate, IFire):
 			bullet = Bullet(self.pos.x, self.pos.y, self.weapon.damage, self.weapon.bullet_speed, self.facing, self.game)
 	def reload(self):
 		pass
+
+class Mob(ActiveEntity):
+	def __init__(self, game, image, x, y):
+		super().__init__(game, image, x, y)
+		self.hp = 100
+		self.vision_radius = 256
+		self.wandering = False
+		self.chasing = False
+		self.last_update = pg.time.get_ticks()
+	def update(self):
+		now = pg.time.get_ticks()
+		dist, direction = self.getDistToPlayer()
+		if self.chasing:
+			if dist <= self.vision_radius:
+				self.facing = direction
+				self.chase()
+			else:
+				self.chasing = False
+				self.last_update = now
+		elif dist <= self.vision_radius:
+			self.facing = direction
+			self.chasing = True
+			self.chase()
+		elif self.wandering:
+			if now - self.last_update < 2000:
+				self.wander()
+			else:
+				self.wandering = False
+				self.last_update = now
+		elif now - self.last_update > 5000:
+			self.last_update = now
+			self.wandering = True
+			self.facing = choice([1, -1])
+			self.wander()
+	def getDistToPlayer(self):
+		vect = self.pos - self.game.player.pos
+		dist = round((vect.x ** 2 + vect.y ** 2) ** 0.5)
+		direction = -1
+		if vect.x < 0:
+			direction = 1
+		return dist, direction
+	def wander(self):
+		self.move(150 * self.facing)
+	def chase(self):
+		self.move(150 * self.facing)
 
 class Weapon(pg.sprite.Sprite):
 	def __init__(self, game, entity):
@@ -276,42 +327,30 @@ class Pistol(Weapon):
 		self.name = 'Pistol'
 		self.ammo = 12
 		self.damage = 30
-		self.bullet_speed = 5
+		self.bullet_speed = 10
 		self.rate = 500
 		
 class Bullet(pg.sprite.Sprite):
 	def __init__(self, posx, posy, damage, speed, facing, game):
 		self.game = game
+		self.handler = Utils()
 		self.groups = self.game.all_sprites, self.game.bullets
 		pg.sprite.Sprite.__init__(self, self.groups)
-		self.image = load_image(path.join(self.game.img_dir,'bullet.png'))
+		self.image = self.handler.load_image(path.join(self.game.img_dir,'bullet.png'))
 		self.rect = self.image.get_rect()
 		self.rect.x = posx + facing * 24
 		self.rect.y = posy - 54
 		self.damage = damage
 		self.speed = speed
 		self.facing = facing
-		self.last_update = pg.time.get_ticks()
 	def update(self):
 		self.rect.x += self.speed * self.facing
-		if self.rect.x > WIDTH:
+		if self.rect.x > self.game.map.width or self.rect.x < 0:
 			self.kill()
-		if self.rect.x < 0:
+		hits = pg.sprite.spritecollide(self, self.game.mobs, False)
+		if hits:
 			self.kill()
-
-class Camera:
-	"""
-	Камера, що працює по принципу оффсетів.
-	Оффсет задає target в методі updatе. В нашому випадку,
-	це Player
-	"""
-	def __init__(self, width, height):
-		self.camera = pg.Rect(0, 0, width, height)
-		self.width = width
-		self.height = height
-	def apply(self, entity):
-		return entity.rect.move(self.camera.topleft)
-	def update(self, target):
-		x = -target.rect.x + int(WIDTH / 2)
-		y = -target.rect.y + int(HEIGHT / 2)
-		self.camera = pg.Rect(x, y, self.width, self.height)
+			enemy = hits[0]
+			enemy.hp -= self.damage
+			if enemy.hp <= 0:
+				enemy.kill()

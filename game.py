@@ -3,6 +3,7 @@ import sys, psutil
 from os import path, getpid
 from settings import *
 from engine import *
+from map import *
 from exceptions import *
 
 class Game:
@@ -16,19 +17,35 @@ class Game:
         pg.key.set_repeat(500, 100)
         self.load_data()
     def load_data(self):
-    	self.dir = path.dirname(__file__)
-    	self.img_dir = path.join(self.dir, 'img')
-    	self.player_img = 'player.png'
-    	self.plat_img = 'block.png'
+        self.handler = Utils()
+        self.dir = path.dirname(__file__)
+        self.img_dir = path.join(self.dir, 'img')
+        self.player_img = 'player.png'
+        self.plat_img = 'grass_block.png'
+        self.dirt_img = 'dirt_block.png'
+        self.mob_img = 'mob.png'
+        self.map = Map(path.join(self.dir, 'map.txt'))
     def new(self):
         self.all_sprites = pg.sprite.Group()
         self._blocks = pg.sprite.Group()
         self._bullets = pg.sprite.Group()
-        self.player = Player(self, self.player_img, WIDTH / 2, HEIGHT / 2)
-        for i in [WIDTH / 2 - 3*64, WIDTH / 2 - 2*64, WIDTH / 2 - 64, WIDTH / 2, WIDTH / 2 + 64, WIDTH / 2 + 2*64, WIDTH / 2 + 3*64]:
-            p = Block(self, self.plat_img, i, 700)
-            self.all_sprites.add(p)
-            self.blocks.add(p)
+        self._mobs = pg.sprite.Group()
+        for row, tiles in enumerate(self.map.data):
+            for col, tile in enumerate(tiles):
+                if tile == '1':
+                    b = Block(self, self.plat_img, col, row)
+                    self.all_sprites.add(b)
+                    self._blocks.add(b)
+                if tile == '0':
+                    b = Block(self, self.dirt_img, col, row)
+                    self.all_sprites.add(b)
+                    self._blocks.add(b)
+                if tile == 'P':
+                    self.player = Player(self, self.player_img, col, row)
+                if tile == 'M':
+                    m = Mob(self, self.mob_img, col, row)
+                    self.all_sprites.add(m)
+                    self._mobs.add(m)
         self.all_sprites.add(self.player)
         self.camera = Camera(WIDTH + 200, HEIGHT + 200)
     def run(self):
@@ -44,6 +61,9 @@ class Game:
     @property
     def bullets(self):
         return self._bullets
+    @property
+    def mobs(self):
+        return self._mobs
     def quit(self):
         pg.quit()
         sys.exit()
